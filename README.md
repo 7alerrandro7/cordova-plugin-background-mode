@@ -79,7 +79,7 @@ cordova.plugins.backgroundMode.isActive(); // => boolean
 A non-active mode means that the app is in foreground.
 
 ### Listen for events
-The plugin fires an event each time its status has been changed. These events are `enable`, `disable`, `activate`, `deactivate` and `failure`.
+The plugin fires an event each time its status has been changed. These events are `enable`, `disable`, `activate`, `deactivate`, `failure` and `stopped`.
 
 ```js
 cordova.plugins.backgroundMode.on('EVENT', function);
