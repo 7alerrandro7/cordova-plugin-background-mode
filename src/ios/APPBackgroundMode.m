@@ -31,6 +31,8 @@
 NSString* const kAPPBackgroundJsNamespace = @"cordova.plugins.backgroundMode";
 NSString* const kAPPBackgroundEventActivate = @"activate";
 NSString* const kAPPBackgroundEventDeactivate = @"deactivate";
+NSString* const kAPPBackgroundEventStopped = @"stopped";
+NSDate* start;
 
 
 #pragma mark -
@@ -51,10 +53,41 @@ NSString* const kAPPBackgroundEventDeactivate = @"deactivate";
 - (void) pluginInitialize
 {
     enabled = NO;
-    [self configureAudioPlayer];
     [self configureAudioSession];
+    [self configureAudioPlayer];
     [self observeLifeCycle];
 }
+
+- (void) interruption:(NSNotification*)notification {
+        // get the user info dictionary
+        NSDictionary *interuptionDict = notification.userInfo;
+        // get the AVAudioSessionInterruptionTypeKey enum from the dictionary
+        NSInteger interuptionType = [[interuptionDict valueForKey:AVAudioSessionInterruptionTypeKey] integerValue];
+        // decide what to do based on interruption type here...
+        switch (interuptionType) {
+            case AVAudioSessionInterruptionTypeBegan:
+                NSLog(@"Audio Session Interruption case started.");
+                // fork to handling method here...
+                // EG:[self handleInterruptionStarted];
+                start = [NSDate date];
+                break;
+
+            case AVAudioSessionInterruptionTypeEnded:
+                NSLog(@"Audio Session Interruption case ended.");
+                // fork to handling method here...
+                // EG:[self handleInterruptionEnded];
+                NSTimeInterval timeInterval = [start timeIntervalSinceNow];
+                NSLog(@"timeInterval %f", timeInterval * (-1));
+                if(timeInterval*(-1) > 30){
+                    [self fireEvent:kAPPBackgroundEventStopped];
+                }
+                [self keepAwakeAfterInterruption];
+                break;
+
+            default:
+                NSLog(@"Audio Session Interruption Notification case default.");
+                break;
+} }
 
 /**
  * Register the listener for pause and resume events.
@@ -73,11 +106,18 @@ NSString* const kAPPBackgroundEventDeactivate = @"deactivate";
                      selector:@selector(stopKeepingAwake)
                          name:UIApplicationWillEnterForegroundNotification
                        object:nil];
+    
+        [AVAudioSession sharedInstance];
+        // register for notifications
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(interruption:)
+                                             name:AVAudioSessionInterruptionNotification
+                                             object:nil];
 
-        [listener addObserver:self
-                     selector:@selector(handleAudioSessionInterruption:)
-                         name:AVAudioSessionInterruptionNotification
-                       object:nil];
+//        [listener addObserver:self
+//                     selector:@selector(handleAudioSessionInterruption:)
+//                         name:AVAudioSessionInterruptionNotification
+//                       object:nil];
 }
 
 #pragma mark -
@@ -114,6 +154,15 @@ NSString* const kAPPBackgroundEventDeactivate = @"deactivate";
 #pragma mark Core
 
 /**
+ * Keep the app awake after a interruption.
+ */
+- (void) keepAwakeAfterInterruption
+{
+    [audioPlayer play];
+    [self fireEvent:kAPPBackgroundEventActivate];
+}
+
+/**
  * Keep the app awake.
  */
 - (void) keepAwake
@@ -138,7 +187,7 @@ NSString* const kAPPBackgroundEventDeactivate = @"deactivate";
         [self fireEvent:kAPPBackgroundEventDeactivate];
     }
 
-    [audioPlayer pause];
+    [audioPlayer play];
 }
 
 /**
@@ -146,17 +195,17 @@ NSString* const kAPPBackgroundEventDeactivate = @"deactivate";
  */
 - (void) configureAudioPlayer
 {
+    
     NSString* path = [[NSBundle mainBundle]
                       pathForResource:@"appbeep" ofType:@"wav"];
 
     NSURL* url = [NSURL fileURLWithPath:path];
 
-
-    audioPlayer = [[AVAudioPlayer alloc]
-                   initWithContentsOfURL:url error:NULL];
+    audioPlayer = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:NULL];
 
     audioPlayer.volume        = 0;
     audioPlayer.numberOfLoops = -1;
+    
 };
 
 /**
@@ -164,8 +213,7 @@ NSString* const kAPPBackgroundEventDeactivate = @"deactivate";
  */
 - (void) configureAudioSession
 {
-    AVAudioSession* session = [AVAudioSession
-                               sharedInstance];
+    AVAudioSession* session = [AVAudioSession sharedInstance];
 
     // Don't activate the audio session yet
     [session setActive:NO error:NULL];
@@ -173,10 +221,14 @@ NSString* const kAPPBackgroundEventDeactivate = @"deactivate";
     // Play music even in background and dont stop playing music
     // even another app starts playing sound
     [session setCategory:AVAudioSessionCategoryPlayback
+                   withOptions:AVAudioSessionCategoryOptionMixWithOthers
                    error:NULL];
+    
+    [session setCategory:AVAudioSessionCategoryAmbient error:NULL];
 
     // Active the audio session
     [session setActive:YES error:NULL];
+    [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
 };
 
 #pragma mark -
@@ -200,7 +252,7 @@ NSString* const kAPPBackgroundEventDeactivate = @"deactivate";
 - (void) handleAudioSessionInterruption:(NSNotification*)notification
 {
     [self fireEvent:kAPPBackgroundEventDeactivate];
-    [self keepAwake];
+    [self keepAwakeAfterInterruption];
 }
 
 /**
