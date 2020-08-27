@@ -159,7 +159,6 @@ NSDate* start;
 - (void) keepAwakeAfterInterruption
 {
     [audioPlayer play];
-    [self fireEvent:kAPPBackgroundEventActivate];
 }
 
 /**
