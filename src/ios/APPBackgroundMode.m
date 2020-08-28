@@ -186,7 +186,7 @@ NSDate* start;
         [self fireEvent:kAPPBackgroundEventDeactivate];
     }
 
-    [audioPlayer play];
+    [audioPlayer pause];
 }
 
 /**
